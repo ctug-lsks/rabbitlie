@@ -658,22 +658,22 @@ export default function AdminPage() {
                   : 'min-w-[550px]'
               }`}
             >
-              {/* Đường lưới gióng ngang */}
-              <div className="absolute inset-x-0 top-8 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
-                <div className="border-b border-dashed border-gray-200 w-full" />
-                <div className="border-b border-dashed border-gray-200 w-full" />
-                <div className="border-b border-dashed border-gray-200 w-full" />
-                <div className="border-b border-gray-200 w-full" />
-              </div>
+              {/* VÙNG VẼ CỘT (CÙNG NẰM TRÊN MỘT ĐƯỜNG BASELINE CỐ ĐỊNH) */}
+              <div className="relative flex h-56 items-end gap-1.5 sm:gap-3 px-2 border-b border-gray-200">
+                {/* Đường lưới gióng ngang phía sau */}
+                <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col justify-between pointer-events-none opacity-40">
+                  <div className="border-b border-dashed border-gray-200 w-full" />
+                  <div className="border-b border-dashed border-gray-200 w-full" />
+                  <div className="border-b border-dashed border-gray-200 w-full" />
+                </div>
 
-              <div className="relative flex h-64 items-end gap-1.5 sm:gap-3 px-2">
                 {activeChartData.map((item, idx) => {
                   const maxVal = Math.max(...activeChartData.map((d) => Math.max(d.views, d.leads)), 5)
                   const viewsHeight = item.views > 0 ? Math.max(8, (item.views / maxVal) * 100) : 0
                   const leadsHeight = item.leads > 0 ? Math.max(8, (item.leads / maxVal) * 100) : 0
 
                   return (
-                    <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+                    <div key={idx} className="flex-1 flex items-end justify-center h-full group z-10">
                       {/* Cặp 2 Cột */}
                       <div className="flex items-end gap-1 w-full justify-center h-full">
                         {/* Cột LƯỢT XEM (XANH) */}
@@ -708,18 +708,33 @@ export default function AdminPage() {
                           />
                         </div>
                       </div>
+                    </div>
+                  )
+                })}
+              </div>
 
-                      {/* Nhãn thời gian trục hoành X */}
-                      <div className="mt-3 text-center">
-                        <span className="text-[11px] sm:text-xs font-bold text-gray-700 block whitespace-nowrap">
-                          {item.key}
+              {/* HÀNG NHÃN THỜI GIAN TRỤC HOÀNH (TẤT CẢ CÁC CỘT ĐỀU CÙNG CHIỀU CAO VÀ NẰM DƯỚI BASELINE) */}
+              <div className="flex items-start gap-1.5 sm:gap-3 px-2 pt-2.5">
+                {activeChartData.map((item, idx) => {
+                  const isToday = chartMode === 'days' && idx === activeChartData.length - 1
+                  return (
+                    <div key={idx} className="flex-1 text-center">
+                      <span
+                        className={`text-[11px] sm:text-xs font-bold block whitespace-nowrap ${
+                          isToday ? 'text-crimson' : 'text-gray-700'
+                        }`}
+                      >
+                        {item.key}
+                      </span>
+                      {chartMode === 'days' && (
+                        <span
+                          className={`text-[10px] block font-semibold transition ${
+                            isToday ? 'text-crimson font-bold' : 'text-transparent select-none'
+                          }`}
+                        >
+                          Hôm nay
                         </span>
-                        {chartMode === 'days' && (
-                          <span className="text-[9px] sm:text-[10px] text-gray-400 block truncate max-w-[50px]">
-                            {idx === activeChartData.length - 1 ? 'Hôm nay' : ''}
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                   )
                 })}
