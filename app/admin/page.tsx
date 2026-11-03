@@ -130,7 +130,9 @@ export default function AdminPage() {
     }
 
     leads.forEach((l) => {
-      const datePart = l.timestamp.split(',')[0].trim()
+      // Trích xuất ngày chuẩn dd/MM/yyyy từ chuỗi thời gian (hỗ trợ cả dấu cách lẫn dấu phẩy)
+      const dateMatch = l.timestamp.match(/\d{1,2}\/\d{1,2}\/\d{4}/)
+      const datePart = dateMatch ? dateMatch[0] : l.timestamp.split(/[,\s]+/)[0].trim()
       if (daysMap[datePart]) {
         daysMap[datePart].leads += 1
       }
@@ -269,6 +271,23 @@ export default function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-7">
+        {/* Thanh trạng thái đồng bộ thời gian thực */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="size-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-gray-500">Trạng thái:</span>
+            <span className="font-semibold text-gray-800">Dữ liệu được cập nhật trực tiếp theo thời gian thực từ Google Sheet</span>
+          </div>
+          <a
+            href="https://docs.google.com/spreadsheets/d/1Vlw1q8q3v6b1Y4DduG06O6cmCcqZAhgIn0jF425bOSs/edit?usp=sharing"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-crimson hover:underline font-semibold inline-flex items-center gap-1"
+          >
+            Mở Google Sheet ↗
+          </a>
+        </div>
+
         {/* Hàng 4 Thẻ KPI Tổng quan */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {/* LƯỢT XEM TRANG */}
