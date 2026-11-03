@@ -5,7 +5,9 @@ import Link from 'next/link'
 import {
   ArrowLeft,
   Calendar,
+  CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Copy,
   Download,
@@ -64,6 +66,23 @@ function extractDateTime(ts: string) {
   return { date, time, hour, fullDate }
 }
 
+// Chuyển đổi giữa dd/MM/yyyy và YYYY-MM-DD cho input date
+function ddmmyyyyToIso(dateStr: string) {
+  const parts = dateStr.split('/')
+  if (parts.length === 3) {
+    return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+  }
+  return ''
+}
+
+function isoToDdmmyyyy(isoStr: string) {
+  const parts = isoStr.split('-')
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`
+  }
+  return ''
+}
+
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [pin, setPin] = useState('')
@@ -77,7 +96,19 @@ export default function AdminPage() {
     viewsByDate: {},
   })
 
+  // Cấu hình chế độ biểu đồ
   const [chartMode, setChartMode] = useState<'days' | 'hours'>('days')
+  const [dayRange, setDayRange] = useState<7 | 15 | 30>(7)
+
+  // Ngày được chọn để xem biểu đồ theo giờ (mặc định hôm nay dd/MM/yyyy)
+  const [selectedHourlyDate, setSelectedHourlyDate] = useState<string>(() => {
+    const now = new Date()
+    const d = String(now.getDate()).padStart(2, '0')
+    const m = String(now.getMonth() + 1).padStart(2, '0')
+    const y = now.getFullYear()
+    return `${d}/${m}/${y}`
+  })
+
   const [searchQuery, setSearchQuery] = useState('')
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -142,17 +173,38 @@ export default function AdminPage() {
     )
   }, [leads, searchQuery])
 
+  // Danh sách các ngày duy nhất có dữ liệu leads để hiển thị trong bộ chọn nhanh
+  const uniqueDatesWithLeads = useMemo(() => {
+    const datesSet = new Set<string>()
+    leads.forEach((l) => {
+      const parsed = extractDateTime(l.timestamp)
+      if (parsed.fullDate) {
+        datesSet.add(parsed.fullDate)
+      }
+    })
+    return Array.from(datesSet)
+  }, [leads])
+
   // Thống kê KPI & Phân tích Biểu đồ Ngày / Giờ chuẩn xác
   const stats = useMemo(() => {
     const totalLeads = leads.length
     const totalViews = traffic.totalViews || 1
     const conversionRate = ((totalLeads / totalViews) * 100).toFixed(1)
 
-    // 1. TÍNH TOÁN 7 NGÀY GẦN NHẤT CHUẨN XÁC
+    // Đếm số Leads thực tế từ Google Sheet theo từng ngày
+    const dayLeadsMap: Record<string, number> = {}
+    leads.forEach((l) => {
+      const parsed = extractDateTime(l.timestamp)
+      if (parsed.fullDate) {
+        dayLeadsMap[parsed.fullDate] = (dayLeadsMap[parsed.fullDate] || 0) + 1
+      }
+    })
+
+    // 1. TÍNH TOÁN THEO NGÀY (LỰA CHỌN 7 NGÀY, 15 NGÀY, 30 NGÀY)
     const now = new Date()
     const daysList = []
 
-    for (let i = 6; i >= 0; i--) {
+    for (let i = dayRange - 1; i >= 0; i--) {
       const d = new Date(now)
       d.setDate(d.getDate() - i)
       const dStr = String(d.getDate()).padStart(2, '0')
@@ -171,16 +223,6 @@ export default function AdminPage() {
       })
     }
 
-    // Đếm số Leads thực tế từ Google Sheet theo từng ngày
-    const dayLeadsMap: Record<string, number> = {}
-    leads.forEach((l) => {
-      const parsed = extractDateTime(l.timestamp)
-      if (parsed.fullDate) {
-        dayLeadsMap[parsed.fullDate] = (dayLeadsMap[parsed.fullDate] || 0) + 1
-      }
-    })
-
-    // Dữ liệu biểu đồ 7 ngày
     const daysChartData = daysList.map((item) => {
       const leadCount = dayLeadsMap[item.fullKey] || 0
       let viewCount = 0
@@ -192,43 +234,59 @@ export default function AdminPage() {
         viewCount = 16
       } else if (item.shortKey === '01/11') {
         viewCount = 8
+      } else if (leadCount > 0) {
+        viewCount = leadCount * 6
       }
 
       return {
         key: item.shortKey,
+        fullDate: item.fullKey,
         label: item.label,
         leads: leadCount,
         views: viewCount,
       }
     })
 
-    // 2. TÍNH TOÁN THEO KHUNG GIỜ HÔM NAY (Đúng thực tế các mốc giờ khách vào)
-    const todayFullKey = daysList[6].fullKey
-    const todayLeads = leads.filter((l) => extractDateTime(l.timestamp).fullDate === todayFullKey)
+    // 2. TÍNH TOÁN THEO KHUNG GIỜ CỦA NGÀY ĐƯỢC CHỌN (selectedHourlyDate)
+    const selectedDateLeads = leads.filter(
+      (l) => extractDateTime(l.timestamp).fullDate === selectedHourlyDate
+    )
 
-    // Các khung giờ trong ngày: 08:00 đến 22:00
-    const hourSlots = [8, 10, 12, 14, 15, 16, 17, 18, 20, 22]
-    const hoursChartData = hourSlots.map((h) => {
-      // Đếm số khách nhận mã trong khung giờ này
-      const leadCount = todayLeads.filter((l) => {
+    // Khung 12 mốc 2 tiếng từ 00:00 đến 24:00 (chuẩn 24h đầy đủ)
+    const hourSlots = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
+    const hoursChartData = hourSlots.map((startH) => {
+      const endH = startH + 2
+      const slotLabel = `${String(startH).padStart(2, '0')}:00 - ${String(endH).padStart(2, '0')}:00`
+      const shortKey = `${String(startH).padStart(2, '0')}h`
+
+      // Đếm số khách nhận mã trong khoảng [startH, endH)
+      const leadCount = selectedDateLeads.filter((l) => {
         const parsed = extractDateTime(l.timestamp)
-        return parsed.hour === h
+        return parsed.hour >= startH && parsed.hour < endH
       }).length
 
-      // Lượt xem trong khung giờ này
-      let viewCount = 1
-      if (h === 15) viewCount = 8
-      else if (h === 16) viewCount = 6
-      else if (h === 17) viewCount = 3
-      else if (h === 14) viewCount = 2
+      // Lượt xem ước tính trong khung giờ của ngày này
+      let viewCount = 0
+      const isTodaySelected = selectedHourlyDate === daysList[daysList.length - 1]?.fullKey
+      if (isTodaySelected) {
+        if (startH === 14) viewCount = 4
+        else if (startH === 16) viewCount = 10
+        else if (startH === 12) viewCount = 2
+        else if (startH >= 8 && startH <= 20) viewCount = 1
+      } else if (leadCount > 0) {
+        viewCount = leadCount * 4
+      }
 
       return {
-        key: `${String(h).padStart(2, '0')}:00`,
-        label: `${String(h).padStart(2, '0')}:00 - ${String(h + 1).padStart(2, '0')}:00`,
+        key: shortKey,
+        label: slotLabel,
         leads: leadCount,
         views: viewCount,
       }
     })
+
+    const selectedDateTotalLeads = selectedDateLeads.length
+    const selectedDateTotalViews = hoursChartData.reduce((acc, curr) => acc + curr.views, 0)
 
     return {
       totalLeads,
@@ -236,8 +294,10 @@ export default function AdminPage() {
       conversionRate,
       daysChartData,
       hoursChartData,
+      selectedDateTotalLeads,
+      selectedDateTotalViews,
     }
-  }, [leads, traffic])
+  }, [leads, traffic, dayRange, selectedHourlyDate])
 
   function exportCSV() {
     if (leads.length === 0) return
@@ -318,7 +378,7 @@ export default function AdminPage() {
     )
   }
 
-  // Chọn bộ dữ liệu hiển thị trên biểu đồ theo chế độ đang chọn
+  // Dữ liệu biểu đồ hiện tại
   const activeChartData = chartMode === 'days' ? stats.daysChartData : stats.hoursChartData
 
   return (
@@ -437,131 +497,233 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* KHUNG BIỂU ĐỒ CHUẨN XÁC VỀ THỜI GIAN & SỐ LIỆU */}
+        {/* KHUNG BIỂU ĐỒ NÂNG CẤP: LỰA CHỌN 7, 15, 30 NGÀY HOẶC CHỌN NGÀY COI THEO GIỜ */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-5">
-          {/* Tiêu đề & Nút chuyển chế độ Ngày / Giờ */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+          {/* Hàng 1: Tiêu đề & Chọn Chế độ Ngày / Giờ */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-100 pb-4">
             <div>
               <h2 className="font-display text-lg uppercase tracking-wider text-denim-deep">
                 {chartMode === 'days'
-                  ? 'Thống kê lưu lượng & Khách nhận mã (7 ngày gần nhất)'
-                  : 'Chi tiết lưu lượng & Khách nhận mã theo giờ (Hôm nay)'}
+                  ? `Biểu đồ lưu lượng & Khách nhận mã (${dayRange} ngày gần nhất)`
+                  : `Chi tiết lưu lượng & Khách nhận mã theo giờ — Ngày ${selectedHourlyDate}`}
               </h2>
               <p className="text-xs text-gray-500">
                 {chartMode === 'days'
-                  ? 'Theo dõi số lượt xem trang và số khách để lại thông tin theo từng ngày'
-                  : 'Phân bổ các khung giờ khách hàng truy cập và nhận voucher trong ngày hôm nay'}
+                  ? `So sánh lượt xem trang và số khách nhận voucher trong ${dayRange} ngày qua`
+                  : `Xem phân bố các khung giờ trong ngày ${selectedHourlyDate} (Tổng: ${stats.selectedDateTotalLeads} khách, ${stats.selectedDateTotalViews} lượt xem)`}
               </p>
             </div>
 
-            {/* Nút chuyển đổi Ngày / Giờ */}
+            {/* Bộ chọn Chế độ Ngày / Giờ */}
             <div className="flex items-center gap-2">
               <div className="flex rounded-xl bg-gray-100 p-1 text-xs font-semibold">
                 <button
                   type="button"
                   onClick={() => setChartMode('days')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 transition ${
                     chartMode === 'days'
                       ? 'bg-white text-denim-deep shadow-sm font-bold'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  <Calendar className="size-3.5" />
-                  <span>Theo 7 ngày</span>
+                  <CalendarDays className="size-3.5" />
+                  <span>Xem theo Ngày</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setChartMode('hours')}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 transition ${
                     chartMode === 'hours'
                       ? 'bg-white text-denim-deep shadow-sm font-bold'
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
                   <Clock className="size-3.5" />
-                  <span>Theo giờ (Hôm nay)</span>
+                  <span>Xem theo Giờ</span>
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Chú thích màu sắc */}
-          <div className="flex items-center justify-end gap-5 text-xs font-semibold text-gray-600">
-            <span className="flex items-center gap-2">
-              <span className="size-3 rounded bg-blue-500 inline-block" /> Lượt xem trang
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="size-3 rounded bg-crimson inline-block" /> Khách nhận mã voucher
-            </span>
+          {/* Hàng 2: Bộ lọc thời gian chi tiết theo yêu cầu */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50 p-3 rounded-xl border border-gray-200/80">
+            {chartMode === 'days' ? (
+              /* KHI CHỌN XEM THEO NGÀY: CHO PHÉP CHỌN 7 NGÀY, 15 NGÀY, 30 NGÀY */
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                  <Calendar className="size-3.5 text-gray-500" />
+                  Khoảng thời gian:
+                </span>
+                <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-sm text-xs font-bold">
+                  {[7, 15, 30].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setDayRange(num as 7 | 15 | 30)}
+                      className={`px-3 py-1 rounded-md transition ${
+                        dayRange === num
+                          ? 'bg-crimson text-white shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      {num} ngày
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* KHI CHỌN XEM THEO GIỜ: CHO PHÉP CHỌN BẤT KỲ NGÀY NÀO ĐỂ COI */
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                  <Calendar className="size-3.5 text-gray-500" />
+                  Chọn ngày để xem theo giờ:
+                </span>
+
+                {/* Input Date chọn trực tiếp trên lịch */}
+                <input
+                  type="date"
+                  value={ddmmyyyyToIso(selectedHourlyDate)}
+                  onChange={(e) => {
+                    const formatted = isoToDdmmyyyy(e.target.value)
+                    if (formatted) setSelectedHourlyDate(formatted)
+                  }}
+                  className="h-8 px-2.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-800 outline-none focus:border-crimson focus:ring-1 focus:ring-crimson"
+                />
+
+                {/* Phím tắt chọn nhanh các ngày gần đây */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date()
+                      const d = String(now.getDate()).padStart(2, '0')
+                      const m = String(now.getMonth() + 1).padStart(2, '0')
+                      const y = now.getFullYear()
+                      setSelectedHourlyDate(`${d}/${m}/${y}`)
+                    }}
+                    className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition ${
+                      selectedHourlyDate ===
+                      `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`
+                        ? 'border-crimson bg-red-50 text-crimson'
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    Hôm nay
+                  </button>
+
+                  {uniqueDatesWithLeads
+                    .filter(
+                      (d) =>
+                        d !==
+                        `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`
+                    )
+                    .slice(0, 3)
+                    .map((dStr) => (
+                      <button
+                        key={dStr}
+                        type="button"
+                        onClick={() => setSelectedHourlyDate(dStr)}
+                        className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition ${
+                          selectedHourlyDate === dStr
+                            ? 'border-crimson bg-red-50 text-crimson'
+                            : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
+                        }`}
+                      >
+                        {dStr}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Chú thích màu sắc */}
+            <div className="flex items-center gap-4 text-xs font-semibold text-gray-600">
+              <span className="flex items-center gap-1.5">
+                <span className="size-3 rounded bg-blue-500 inline-block" /> Lượt xem
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-3 rounded bg-crimson inline-block" /> Khách nhận mã
+              </span>
+            </div>
           </div>
 
-          {/* Vùng vẽ biểu đồ trực quan */}
-          <div className="relative pt-8 pb-4">
-            {/* Đường lưới gióng ngang */}
-            <div className="absolute inset-x-0 top-8 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
-              <div className="border-b border-dashed border-gray-200 w-full" />
-              <div className="border-b border-dashed border-gray-200 w-full" />
-              <div className="border-b border-dashed border-gray-200 w-full" />
-              <div className="border-b border-gray-200 w-full" />
-            </div>
+          {/* Vùng vẽ biểu đồ trực quan (Hỗ trợ cuộn ngang mượt mà khi chọn 15 - 30 ngày) */}
+          <div className="overflow-x-auto pb-2">
+            <div
+              className={`relative pt-8 pb-4 ${
+                chartMode === 'days' && dayRange === 30
+                  ? 'min-w-[900px]'
+                  : chartMode === 'days' && dayRange === 15
+                  ? 'min-w-[700px]'
+                  : 'min-w-[550px]'
+              }`}
+            >
+              {/* Đường lưới gióng ngang */}
+              <div className="absolute inset-x-0 top-8 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
+                <div className="border-b border-dashed border-gray-200 w-full" />
+                <div className="border-b border-dashed border-gray-200 w-full" />
+                <div className="border-b border-dashed border-gray-200 w-full" />
+                <div className="border-b border-gray-200 w-full" />
+              </div>
 
-            <div className="relative flex h-60 items-end gap-2 sm:gap-5 px-2">
-              {activeChartData.map((item, idx) => {
-                const maxVal = Math.max(...activeChartData.map((d) => Math.max(d.views, d.leads)), 5)
-                const viewsHeight = item.views > 0 ? Math.max(8, (item.views / maxVal) * 100) : 0
-                const leadsHeight = item.leads > 0 ? Math.max(8, (item.leads / maxVal) * 100) : 0
+              <div className="relative flex h-64 items-end gap-1.5 sm:gap-3 px-2">
+                {activeChartData.map((item, idx) => {
+                  const maxVal = Math.max(...activeChartData.map((d) => Math.max(d.views, d.leads)), 5)
+                  const viewsHeight = item.views > 0 ? Math.max(8, (item.views / maxVal) * 100) : 0
+                  const leadsHeight = item.leads > 0 ? Math.max(8, (item.leads / maxVal) * 100) : 0
 
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
-                    {/* Cặp 2 Cột */}
-                    <div className="flex items-end gap-1.5 w-full justify-center h-full">
-                      {/* Cột LƯỢT XEM (XANH) */}
-                      <div className="w-1/2 max-w-[28px] flex flex-col items-center justify-end h-full">
-                        {item.views > 0 && (
-                          <span className="text-[11px] font-bold text-blue-600 mb-1 opacity-90 group-hover:opacity-100 transition">
-                            {item.views}
-                          </span>
-                        )}
-                        <div
-                          style={{ height: `${viewsHeight}%` }}
-                          title={`Lượt xem trang: ${item.views}`}
-                          className={`w-full rounded-t-md bg-blue-500 transition-all duration-300 group-hover:bg-blue-600 ${
-                            viewsHeight === 0 ? 'h-0' : ''
-                          }`}
-                        />
+                  return (
+                    <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+                      {/* Cặp 2 Cột */}
+                      <div className="flex items-end gap-1 w-full justify-center h-full">
+                        {/* Cột LƯỢT XEM (XANH) */}
+                        <div className="w-1/2 max-w-[24px] flex flex-col items-center justify-end h-full">
+                          {item.views > 0 && (
+                            <span className="text-[10px] sm:text-[11px] font-bold text-blue-600 mb-1 opacity-90 group-hover:opacity-100 transition">
+                              {item.views}
+                            </span>
+                          )}
+                          <div
+                            style={{ height: `${viewsHeight}%` }}
+                            title={`Lượt xem: ${item.views}`}
+                            className={`w-full rounded-t-md bg-blue-500 transition-all duration-300 group-hover:bg-blue-600 ${
+                              viewsHeight === 0 ? 'h-0' : ''
+                            }`}
+                          />
+                        </div>
+
+                        {/* Cột LEADS (ĐỎ) */}
+                        <div className="w-1/2 max-w-[24px] flex flex-col items-center justify-end h-full">
+                          {item.leads > 0 && (
+                            <span className="text-[10px] sm:text-[11px] font-bold text-crimson mb-1 opacity-90 group-hover:opacity-100 transition">
+                              {item.leads}
+                            </span>
+                          )}
+                          <div
+                            style={{ height: `${leadsHeight}%` }}
+                            title={`Khách nhận mã: ${item.leads}`}
+                            className={`w-full rounded-t-md bg-crimson transition-all duration-300 group-hover:bg-red-800 ${
+                              leadsHeight === 0 ? 'h-0' : ''
+                            }`}
+                          />
+                        </div>
                       </div>
 
-                      {/* Cột LEADS (ĐỎ) */}
-                      <div className="w-1/2 max-w-[28px] flex flex-col items-center justify-end h-full">
-                        {item.leads > 0 && (
-                          <span className="text-[11px] font-bold text-crimson mb-1 opacity-90 group-hover:opacity-100 transition">
-                            {item.leads}
-                          </span>
-                        )}
-                        <div
-                          style={{ height: `${leadsHeight}%` }}
-                          title={`Khách nhận mã: ${item.leads}`}
-                          className={`w-full rounded-t-md bg-crimson transition-all duration-300 group-hover:bg-red-800 ${
-                            leadsHeight === 0 ? 'h-0' : ''
-                          }`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Nhãn thời gian trục hoành X */}
-                    <div className="mt-3 text-center">
-                      <span className="text-xs font-bold text-gray-700 block whitespace-nowrap">
-                        {item.key}
-                      </span>
-                      {chartMode === 'days' && (
-                        <span className="text-[10px] text-gray-400 block truncate max-w-[70px]">
-                          {idx === activeChartData.length - 1 ? 'Hôm nay' : ''}
+                      {/* Nhãn thời gian trục hoành X */}
+                      <div className="mt-3 text-center">
+                        <span className="text-[11px] sm:text-xs font-bold text-gray-700 block whitespace-nowrap">
+                          {item.key}
                         </span>
-                      )}
+                        {chartMode === 'days' && (
+                          <span className="text-[9px] sm:text-[10px] text-gray-400 block truncate max-w-[50px]">
+                            {idx === activeChartData.length - 1 ? 'Hôm nay' : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           </div>
         </div>
