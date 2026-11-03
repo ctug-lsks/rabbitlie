@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Anton, Space_Grotesk } from 'next/font/google'
 import './globals.css'
+import { PageTracker } from '@/components/page-tracker'
 
 const anton = Anton({
   weight: '400',
@@ -40,6 +41,7 @@ export default function RootLayout({
   return (
     <html lang="vi" className={`${anton.variable} ${spaceGrotesk.variable}`}>
       <body className="antialiased">
+        <PageTracker />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

@@ -51,6 +51,8 @@ export function DiscountBanner() {
     setError(null)
     setIsSubmitting(true)
 
+    const customWebhook = typeof window !== 'undefined' ? localStorage.getItem('rabbitlie_sheet_webhook') : null
+
     try {
       await fetch('/api/leads', {
         method: 'POST',
@@ -59,8 +61,24 @@ export function DiscountBanner() {
           email: email.trim(),
           phone: phone.trim(),
           voucherCode: VOUCHER_CODE,
+          customWebhookUrl: customWebhook || undefined,
         }),
       })
+
+      // Gửi đồng thời trực tiếp từ trình duyệt (dự phòng trường hợp server Vercel chưa cập nhật biến môi trường)
+      if (customWebhook) {
+        fetch(customWebhook, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            email: email.trim(),
+            phone: phone.trim(),
+            voucherCode: VOUCHER_CODE,
+          }),
+        }).catch(() => {})
+      }
+
       setClaimed(true)
     } catch {
       // Fallback: Nếu mạng chập chờn vẫn cho người dùng nhận mã để giữ khách
