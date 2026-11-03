@@ -46,6 +46,22 @@ export async function POST(req: Request) {
       )
     }
 
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanPhone = phone.trim()
+
+    // Chặn gửi trùng lặp nếu cùng email & số điện thoại vừa gửi trong 10 giây
+    const isDuplicate = memoryLeads.slice(0, 5).some(
+      (l) => l.email.toLowerCase() === cleanEmail && l.phone === cleanPhone
+    )
+
+    if (isDuplicate) {
+      return NextResponse.json({
+        success: true,
+        message: 'Thông tin đã được ghi nhận',
+        sheetStatus: 'skipped_duplicate',
+      })
+    }
+
     const timestamp = new Date().toLocaleString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
     })
@@ -53,7 +69,7 @@ export async function POST(req: Request) {
     const newLead = {
       timestamp,
       email: email.trim(),
-      phone: phone.trim(),
+      phone: cleanPhone,
       voucherCode,
       status: 'Chưa sử dụng',
     }
