@@ -31,6 +31,9 @@ let memoryLeads: Array<{
   },
 ]
 
+const DEFAULT_GOOGLE_SHEET_URL =
+  'https://script.google.com/macros/s/AKfycbzjt-PZKWK-JyILyILUaPInDGOgI8fNzW3ckjLpTGxmhpeKau8Exu4GgD0yzzBsndNicw/exec'
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -57,8 +60,11 @@ export async function POST(req: Request) {
 
     memoryLeads.unshift(newLead)
 
-    // Xác định link Google Sheet Web App (ưu tiên customWebhookUrl nếu client gửi lên, sau đó là env)
-    const googleSheetUrl = customWebhookUrl || process.env.GOOGLE_SHEET_WEBAPP_URL
+    // Ưu tiên link truyền vào, sau đó đến env, và mặc định là Web App URL chính thức của bạn
+    const googleSheetUrl =
+      customWebhookUrl ||
+      process.env.GOOGLE_SHEET_WEBAPP_URL ||
+      DEFAULT_GOOGLE_SHEET_URL
 
     let sheetStatus = 'no_url'
     if (googleSheetUrl) {
@@ -95,7 +101,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const customUrl = searchParams.get('url')
-  const googleSheetUrl = customUrl || process.env.GOOGLE_SHEET_WEBAPP_URL
+  const googleSheetUrl =
+    customUrl || process.env.GOOGLE_SHEET_WEBAPP_URL || DEFAULT_GOOGLE_SHEET_URL
 
   if (googleSheetUrl) {
     try {

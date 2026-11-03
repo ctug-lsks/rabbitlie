@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { Check, Copy, Gift } from 'lucide-react'
 
 const VOUCHER_CODE = 'BADBUNNY20'
+const OFFICIAL_SHEET_URL =
+  'https://script.google.com/macros/s/AKfycbzjt-PZKWK-JyILyILUaPInDGOgI8fNzW3ckjLpTGxmhpeKau8Exu4GgD0yzzBsndNicw/exec'
 
 function getTimeLeft() {
   const now = new Date()
@@ -65,19 +67,18 @@ export function DiscountBanner() {
         }),
       })
 
-      // Gửi đồng thời trực tiếp từ trình duyệt (dự phòng trường hợp server Vercel chưa cập nhật biến môi trường)
-      if (customWebhook) {
-        fetch(customWebhook, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            email: email.trim(),
-            phone: phone.trim(),
-            voucherCode: VOUCHER_CODE,
-          }),
-        }).catch(() => {})
-      }
+      // Gửi đồng thời trực tiếp từ trình duyệt để dữ liệu ghi vào Google Sheet 100%
+      const targetWebhook = customWebhook || OFFICIAL_SHEET_URL
+      fetch(targetWebhook, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          email: email.trim(),
+          phone: phone.trim(),
+          voucherCode: VOUCHER_CODE,
+        }),
+      }).catch(() => {})
 
       setClaimed(true)
     } catch {
