@@ -61,9 +61,14 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-2 border-t border-background/15 pt-6 text-xs text-background/60 sm:flex-row sm:justify-between">
+        <div className="mt-12 flex flex-col gap-2 border-t border-background/15 pt-6 text-xs text-background/60 sm:flex-row sm:justify-between items-center">
           <p>&copy; {new Date().getFullYear()} RabbitLie. Bảo lưu mọi quyền.</p>
-          <p>Làm từ 100% denim được giải cứu.</p>
+          <div className="flex items-center gap-4">
+            <p>Làm từ 100% denim được giải cứu.</p>
+            <a href="/admin" className="text-background/40 hover:text-background/80 transition underline text-[11px]">
+              Quản trị CRM
+            </a>
+          </div>
         </div>
       </div>
     </footer>

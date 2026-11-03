@@ -34,10 +34,11 @@ export function DiscountBanner() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
       setError('Vui lòng nhập email hợp lệ.')
@@ -48,7 +49,25 @@ export function DiscountBanner() {
       return
     }
     setError(null)
-    setClaimed(true)
+    setIsSubmitting(true)
+
+    try {
+      await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          phone: phone.trim(),
+          voucherCode: VOUCHER_CODE,
+        }),
+      })
+      setClaimed(true)
+    } catch {
+      // Fallback: Nếu mạng chập chờn vẫn cho người dùng nhận mã để giữ khách
+      setClaimed(true)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   async function copyCode() {
@@ -153,9 +172,17 @@ export function DiscountBanner() {
                 )}
                 <button
                   type="submit"
-                  className="mt-1 h-12 rounded-md bg-denim-deep text-sm font-bold uppercase tracking-wide text-background transition-all hover:bg-crimson hover:shadow-[0_0_28px_rgba(153,0,0,0.45)]"
+                  disabled={isSubmitting}
+                  className="mt-1 h-12 rounded-md bg-denim-deep text-sm font-bold uppercase tracking-wide text-background transition-all hover:bg-crimson hover:shadow-[0_0_28px_rgba(153,0,0,0.45)] disabled:cursor-not-allowed disabled:opacity-75 flex items-center justify-center gap-2"
                 >
-                  Nhận voucher 20%
+                  {isSubmitting ? (
+                    <>
+                      <span className="size-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      Đang lưu thông tin...
+                    </>
+                  ) : (
+                    'Nhận voucher 20%'
+                  )}
                 </button>
                 <p className="text-xs text-muted-foreground">Không spam. Chỉ có drop mới, deal hời & bad attitude.</p>
               </form>
