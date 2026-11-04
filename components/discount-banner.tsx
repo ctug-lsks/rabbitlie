@@ -31,6 +31,7 @@ const pad = (n: number | undefined) => (n === undefined ? '--' : String(n).padSt
 
 export function DiscountBanner() {
   const time = useCountdown()
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +41,10 @@ export function DiscountBanner() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!name.trim()) {
+      setError('Vui lòng nhập tên của bạn.')
+      return
+    }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
       setError('Vui lòng nhập email hợp lệ.')
       return
@@ -58,6 +63,7 @@ export function DiscountBanner() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: name.trim(),
           email: email.trim(),
           phone: phone.trim(),
           voucherCode: VOUCHER_CODE,
@@ -138,6 +144,21 @@ export function DiscountBanner() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} noValidate className="flex w-full flex-col gap-4 rounded-lg bg-background p-6 text-foreground md:p-8">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="offer-name" className="text-sm font-semibold uppercase tracking-wide text-denim-deep">
+                    Tên của bạn
+                  </label>
+                  <input
+                    id="offer-name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Nguyễn Văn A"
+                    className="h-12 rounded-md border border-input bg-card px-4 outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-crimson focus:ring-2 focus:ring-crimson/20"
+                  />
+                </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="offer-email" className="text-sm font-semibold uppercase tracking-wide text-denim-deep">
                     Email

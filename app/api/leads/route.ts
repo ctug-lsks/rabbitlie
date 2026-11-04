@@ -6,21 +6,24 @@ const GOOGLE_SHEET_CSV_URL =
 const DEFAULT_GOOGLE_SHEET_URL =
   'https://script.google.com/macros/s/AKfycbzjt-PZKWK-JyILyILUaPInDGOgI8fNzW3ckjLpTGxmhpeKau8Exu4GgD0yzzBsndNicw/exec'
 
-// Bộ nhớ tạm cục bộ (chỉ lưu các lead thật vừa gửi trong phiên chạy)
-let recentLeads: Array<{
+interface LeadItem {
   timestamp: string
+  name: string
   email: string
   phone: string
   voucherCode: string
   status: string
-}> = []
+}
 
-// Hàm phân tích dữ liệu CSV lấy trực tiếp từ Google Sheet của bạn
+// Bộ nhớ tạm cục bộ
+let recentLeads: Array<LeadItem> = []
+
+// Hàm phân tích dữ liệu CSV lấy trực tiếp từ Google Sheet của bạn (tự động thích ứng cả 4 cột cũ và 5 cột mới)
 function parseSheetCSV(csvText: string) {
   const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0)
   if (lines.length <= 1) return []
 
-  const leads = []
+  const leads: LeadItem[] = []
   // Bỏ qua dòng tiêu đề (i = 0)
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i]
@@ -33,14 +36,29 @@ function parseSheetCSV(csvText: string) {
     }
 
     const timestamp = cols[0] ? cols[0].trim() : ''
-    const email = cols[1] ? cols[1].trim() : ''
-    const phone = cols[2] ? cols[2].trim() : ''
-    const voucherCode = cols[3] ? cols[3].trim() : 'BADBUNNY20'
+    let name = ''
+    let email = ''
+    let phone = ''
+    let voucherCode = 'BADBUNNY20'
+
+    // Nhận diện tự động: Nếu cột 2 chứa @ thì là định dạng 4 cột cũ (không có Tên), nếu không thì là định dạng 5 cột mới
+    if (cols.length >= 5 && cols[1] && !cols[1].includes('@')) {
+      name = cols[1].trim()
+      email = cols[2] ? cols[2].trim() : ''
+      phone = cols[3] ? cols[3].trim() : ''
+      voucherCode = cols[4] ? cols[4].trim() : 'BADBUNNY20'
+    } else {
+      // 4 cột cũ
+      email = cols[1] ? cols[1].trim() : ''
+      phone = cols[2] ? cols[2].trim() : ''
+      voucherCode = cols[3] ? cols[3].trim() : 'BADBUNNY20'
+    }
 
     // Chỉ lấy dòng có email hoặc số điện thoại hợp lệ
     if (email || phone) {
       leads.push({
         timestamp,
+        name,
         email,
         phone,
         voucherCode,
@@ -56,7 +74,7 @@ function parseSheetCSV(csvText: string) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { email, phone, voucherCode = 'BADBUNNY20' } = body
+    const { name = '', email, phone, voucherCode = 'BADBUNNY20' } = body
 
     if (!email || !phone) {
       return NextResponse.json(
@@ -65,6 +83,7 @@ export async function POST(req: Request) {
       )
     }
 
+    const cleanName = (name || '').trim()
     const cleanEmail = email.trim().toLowerCase()
     const cleanPhone = phone.trim()
 
@@ -85,8 +104,9 @@ export async function POST(req: Request) {
       timeZone: 'Asia/Ho_Chi_Minh',
     })
 
-    const newLead = {
+    const newLead: LeadItem = {
       timestamp,
+      name: cleanName,
       email: email.trim(),
       phone: cleanPhone,
       voucherCode,
@@ -95,7 +115,7 @@ export async function POST(req: Request) {
 
     recentLeads.unshift(newLead)
 
-    // Gửi thẳng vào Google Sheet Webhook
+    // Gửi thẳng vào Google Sheet Webhook (đủ 5 trường: timestamp, name, email, phone, voucherCode)
     const googleSheetUrl = process.env.GOOGLE_SHEET_WEBAPP_URL || DEFAULT_GOOGLE_SHEET_URL
 
     let sheetStatus = 'no_url'
@@ -104,7 +124,13 @@ export async function POST(req: Request) {
         const res = await fetch(googleSheetUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(newLead),
+          body: JSON.stringify({
+            timestamp,
+            name: cleanName,
+            email: email.trim(),
+            phone: cleanPhone,
+            voucherCode,
+          }),
           redirect: 'follow',
         })
         sheetStatus = res.ok ? 'success' : `status_${res.status}`

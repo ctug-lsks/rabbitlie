@@ -23,6 +23,7 @@ import {
 
 interface Lead {
   timestamp: string
+  name?: string
   email: string
   phone: string
   voucherCode: string
@@ -161,12 +162,13 @@ export default function AdminPage() {
     }
   }, [isAuthenticated])
 
-  // Lọc tìm kiếm theo email hoặc số điện thoại
+  // Lọc tìm kiếm theo tên, email hoặc số điện thoại
   const filteredLeads = useMemo(() => {
     const q = searchQuery.toLowerCase().trim()
     if (!q) return leads
     return leads.filter(
       (l) =>
+        (l.name && l.name.toLowerCase().includes(q)) ||
         l.email.toLowerCase().includes(q) ||
         l.phone.toLowerCase().includes(q) ||
         l.voucherCode.toLowerCase().includes(q)
@@ -301,9 +303,10 @@ export default function AdminPage() {
 
   function exportCSV() {
     if (leads.length === 0) return
-    const headers = ['Thời gian', 'Email', 'Số điện thoại', 'Mã Voucher', 'Trạng thái']
+    const headers = ['Thời gian', 'Họ và tên', 'Email', 'Số điện thoại', 'Mã Voucher', 'Trạng thái']
     const rows = leads.map((l) => [
       `"${l.timestamp}"`,
+      `"${l.name || ''}"`,
       `"${l.email}"`,
       `"${l.phone}"`,
       `"${l.voucherCode}"`,
@@ -760,7 +763,7 @@ export default function AdminPage() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Tìm nhanh email, số điện thoại..."
+                placeholder="Tìm nhanh tên, email, số điện thoại..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-10 w-full rounded-xl border border-gray-300 bg-gray-50 pl-10 pr-4 text-xs text-gray-900 placeholder-gray-400 outline-none focus:border-crimson focus:bg-white focus:ring-1 focus:ring-crimson transition"
@@ -774,6 +777,7 @@ export default function AdminPage() {
               <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-600 border-y border-gray-200">
                 <tr>
                   <th className="py-3 px-4">Ngày giờ đăng ký</th>
+                  <th className="py-3 px-4">Họ và tên</th>
                   <th className="py-3 px-4">Email khách hàng</th>
                   <th className="py-3 px-4">Số điện thoại</th>
                   <th className="py-3 px-4">Mã ưu đãi</th>
@@ -784,7 +788,7 @@ export default function AdminPage() {
               <tbody className="divide-y divide-gray-100 text-gray-700">
                 {filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-sm text-gray-500">
+                    <td colSpan={7} className="py-10 text-center text-sm text-gray-500">
                       Chưa tìm thấy khách hàng nào phù hợp.
                     </td>
                   </tr>
@@ -803,6 +807,19 @@ export default function AdminPage() {
                             </span>
                           </div>
                         </td>
+                        {/* Cột Họ và tên */}
+                        <td className="py-3.5 px-4 whitespace-nowrap font-medium text-gray-900">
+                          {lead.name ? (
+                            <span className="flex items-center gap-1.5">
+                              <span className="size-5 rounded-full bg-crimson/10 text-crimson font-bold text-[10px] flex items-center justify-center">
+                                {lead.name.charAt(0).toUpperCase()}
+                              </span>
+                              {lead.name}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 font-normal italic">—</span>
+                          )}
+                        </td>
                         <td className="py-3.5 px-4 font-semibold text-gray-900">{lead.email}</td>
                         <td className="py-3.5 px-4 whitespace-nowrap font-mono font-medium text-blue-700">
                           {lead.phone}
@@ -820,7 +837,12 @@ export default function AdminPage() {
                         </td>
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <button
-                            onClick={() => copyToClipboard(`${lead.phone} - ${lead.email}`, idx)}
+                            onClick={() =>
+                              copyToClipboard(
+                                `${lead.name ? lead.name + ' - ' : ''}${lead.phone} - ${lead.email}`,
+                                idx
+                              )
+                            }
                             className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-sm hover:bg-gray-50 hover:text-crimson transition"
                           >
                             <Copy className="size-3" />
