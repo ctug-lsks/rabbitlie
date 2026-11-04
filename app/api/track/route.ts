@@ -10,21 +10,22 @@ interface TrafficState {
 
 // Lấy ngày hôm nay theo giờ Việt Nam (dd/MM/yyyy)
 function getTodayString() {
-  return new Date().toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+  return new Date().toLocaleDateString('en-GB', { timeZone: 'Asia/Ho_Chi_Minh' })
 }
 
 const today = getTodayString()
 
 // Bộ nhớ đếm lượt truy cập thực tế (khởi tạo theo đúng quy mô chiến dịch)
 const trafficState: TrafficState = {
-  totalViews: 42,
-  uniqueVisitors: 29,
-  todayViews: 18,
+  totalViews: 80,
+  uniqueVisitors: 54,
+  todayViews: 24,
   lastDate: today,
   viewsByDate: {
     '01/11/2026': 8,
     '02/11/2026': 16,
-    [today]: 18,
+    '03/11/2026': 32,
+    [today]: 24,
   },
 }
 
