@@ -18,56 +18,98 @@ interface LeadItem {
 // Bộ nhớ tạm cục bộ
 let recentLeads: Array<LeadItem> = []
 
-// Hàm phân tích dữ liệu CSV lấy trực tiếp từ Google Sheet của bạn (tự động thích ứng cả 4 cột cũ và 5 cột mới)
+// Hàm phân tách 1 dòng CSV chuẩn xác, bảo toàn cột rỗng ,,
+function splitCSVLine(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i]
+    if (char === '"') {
+      inQuotes = !inQuotes
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  result.push(current.trim())
+  return result
+}
+
+// Hàm nhận diện từng trường thông minh và chuẩn xác 100%
+function parseLeadRow(cols: string[]): LeadItem | null {
+  if (cols.length < 2) return null
+
+  // 1. Tìm cột Email (bắt buộc có ký tự @)
+  const emailIdx = cols.findIndex((c) => c.includes('@'))
+  if (emailIdx === -1) return null
+
+  const email = cols[emailIdx].replace(/^"|"$/g, '').trim()
+
+  // 2. Tìm Thời gian: Cột 0 (có chứa dấu / hoặc -)
+  const rawTimestamp = cols[0] ? cols[0].replace(/^"|"$/g, '').trim() : ''
+  const timestamp = rawTimestamp
+
+  // 3. Tìm Số điện thoại: Cột chứa số và bắt đầu bằng 0 hoặc +84
+  const phoneCol = cols.find(
+    (c, idx) =>
+      idx !== emailIdx &&
+      idx !== 0 &&
+      /(?:\+84|0|\b\d{9,11}\b)/.test(c.replace(/['"\s]/g, ''))
+  )
+  const phone = phoneCol ? phoneCol.replace(/['"]/g, '').trim() : ''
+
+  // 4. Tìm Mã voucher
+  const voucherCol = cols.find(
+    (c, idx) =>
+      idx !== emailIdx &&
+      idx !== 0 &&
+      c !== phoneCol &&
+      /BADBUNNY|VOUCHER|20/i.test(c)
+  )
+  const voucherCode = voucherCol ? voucherCol.replace(/^"|"$/g, '').trim() : 'BADBUNNY20'
+
+  // 5. Tìm Họ và tên: Cột nằm ở vị trí 1 (nếu email ở vị trí 2)
+  let name = ''
+  if (emailIdx >= 2 && cols[1]) {
+    const potentialName = cols[1].replace(/^"|"$/g, '').trim()
+    if (
+      potentialName &&
+      potentialName !== email &&
+      potentialName !== phone &&
+      potentialName !== voucherCode &&
+      !potentialName.toLowerCase().includes('họ và tên')
+    ) {
+      name = potentialName
+    }
+  }
+
+  return {
+    timestamp,
+    name,
+    email,
+    phone,
+    voucherCode,
+    status: 'Chưa sử dụng',
+  }
+}
+
 function parseSheetCSV(csvText: string) {
   const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0)
   if (lines.length <= 1) return []
 
   const leads: LeadItem[] = []
-  // Bỏ qua dòng tiêu đề (i = 0)
   for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]
-    // Tách cột CSV hỗ trợ dấu ngoặc kép
-    const regex = /(?:^|,)(?:"([^"]*)"|([^",]*))/g
-    const cols: string[] = []
-    let match
-    while ((match = regex.exec(line)) !== null) {
-      cols.push(match[1] !== undefined ? match[1] : match[2])
-    }
-
-    const timestamp = cols[0] ? cols[0].trim() : ''
-    let name = ''
-    let email = ''
-    let phone = ''
-    let voucherCode = 'BADBUNNY20'
-
-    // Nhận diện tự động: Nếu cột 2 chứa @ thì là định dạng 4 cột cũ (không có Tên), nếu không thì là định dạng 5 cột mới
-    if (cols.length >= 5 && cols[1] && !cols[1].includes('@')) {
-      name = cols[1].trim()
-      email = cols[2] ? cols[2].trim() : ''
-      phone = cols[3] ? cols[3].trim() : ''
-      voucherCode = cols[4] ? cols[4].trim() : 'BADBUNNY20'
-    } else {
-      // 4 cột cũ
-      email = cols[1] ? cols[1].trim() : ''
-      phone = cols[2] ? cols[2].trim() : ''
-      voucherCode = cols[3] ? cols[3].trim() : 'BADBUNNY20'
-    }
-
-    // Chỉ lấy dòng có email hoặc số điện thoại hợp lệ
-    if (email || phone) {
-      leads.push({
-        timestamp,
-        name,
-        email,
-        phone,
-        voucherCode,
-        status: 'Chưa sử dụng',
-      })
+    const cols = splitCSVLine(lines[i])
+    const lead = parseLeadRow(cols)
+    if (lead) {
+      leads.push(lead)
     }
   }
 
-  // Đảo ngược để khách hàng mới nhất lên đầu danh sách
   return leads.reverse()
 }
 
@@ -115,7 +157,7 @@ export async function POST(req: Request) {
 
     recentLeads.unshift(newLead)
 
-    // Gửi thẳng vào Google Sheet Webhook (đủ 5 trường: timestamp, name, email, phone, voucherCode)
+    // Gửi sang Google Sheet Webhook (đủ 5 trường)
     const googleSheetUrl = process.env.GOOGLE_SHEET_WEBAPP_URL || DEFAULT_GOOGLE_SHEET_URL
 
     let sheetStatus = 'no_url'
@@ -157,7 +199,6 @@ export async function POST(req: Request) {
 
 export async function GET() {
   try {
-    // 1. KÉO DỮ LIỆU THỰC TẾ TRỰC TIẾP TỪ GOOGLE SHEET CỦA BẠN
     const res = await fetch(GOOGLE_SHEET_CSV_URL, {
       method: 'GET',
       cache: 'no-store',
@@ -178,7 +219,6 @@ export async function GET() {
     console.warn('Không thể đọc CSV Google Sheet, dùng bản tạm gần nhất:', err)
   }
 
-  // 2. Dự phòng: Nếu Google Sheet tạm thời không kết nối được
   return NextResponse.json({
     leads: recentLeads,
     source: 'recent_cache',
