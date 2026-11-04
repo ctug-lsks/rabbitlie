@@ -710,6 +710,19 @@ export default function AdminPage() {
                   }}
                   className="h-8 px-2.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-800 outline-none focus:border-crimson focus:ring-1 focus:ring-crimson shadow-sm cursor-pointer"
                 />
+
+                {/* Nút bấm nhanh để trở về data Hôm nay */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedHourlyDate(getTodayVn())}
+                  className={`h-8 px-3 rounded-lg border text-xs font-semibold transition shadow-sm ${
+                    selectedHourlyDate === getTodayVn()
+                      ? 'border-crimson bg-red-50 text-crimson font-bold'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  Hôm nay
+                </button>
               </div>
             )}
 
