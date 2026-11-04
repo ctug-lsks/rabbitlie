@@ -298,34 +298,6 @@ export default function AdminPage() {
     )
   }, [leads, searchQuery])
 
-  // Danh sách các ngày có dữ liệu (kết hợp cả leads lẫn traffic) để người dùng chọn nhanh
-  const quickDatesList = useMemo(() => {
-    const today = getTodayVn()
-    const datesSet = new Set<string>()
-
-    // Thêm các ngày từ leads
-    leads.forEach((l) => {
-      const parsed = extractDateTime(l.timestamp)
-      if (parsed.fullDate && parsed.fullDate !== today) {
-        datesSet.add(parsed.fullDate)
-      }
-    })
-
-    // Thêm các ngày từ traffic
-    if (traffic.viewsByDate) {
-      Object.keys(traffic.viewsByDate).forEach((d) => {
-        if (d !== today) datesSet.add(d)
-      })
-    }
-
-    // Các mốc ngày chiến dịch vừa qua
-    ;['03/11/2026', '02/11/2026', '01/11/2026'].forEach((d) => {
-      if (d !== today) datesSet.add(d)
-    })
-
-    return Array.from(datesSet).slice(0, 5)
-  }, [leads, traffic])
-
   // Thống kê KPI & Phân tích Biểu đồ Ngày / Giờ chuẩn xác
   const stats = useMemo(() => {
     const totalLeads = leads.length
@@ -721,8 +693,8 @@ export default function AdminPage() {
                 </div>
               </div>
             ) : (
-              /* KHI CHỌN XEM THEO GIỜ: CHO PHÉP CHỌN BẤT KỲ NGÀY NÀO ĐỂ COI */
-              <div className="flex flex-wrap items-center gap-3">
+              /* KHI CHỌN XEM THEO GIỜ: CHO PHÉP CHỌN BẤT KỲ NGÀY NÀO ĐỂ COI TRỰC TIẾP TRÊN LỊCH */
+              <div className="flex items-center gap-2.5">
                 <span className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
                   <Calendar className="size-3.5 text-gray-500" />
                   Chọn ngày để xem theo giờ:
@@ -736,38 +708,8 @@ export default function AdminPage() {
                     const formatted = isoToDdmmyyyy(e.target.value)
                     if (formatted) setSelectedHourlyDate(formatted)
                   }}
-                  className="h-8 px-2.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-800 outline-none focus:border-crimson focus:ring-1 focus:ring-crimson"
+                  className="h-8 px-2.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-800 outline-none focus:border-crimson focus:ring-1 focus:ring-crimson shadow-sm cursor-pointer"
                 />
-
-                {/* Phím tắt chọn nhanh các ngày gần đây */}
-                <div className="flex items-center gap-1.5 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedHourlyDate(getTodayVn())}
-                    className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition ${
-                      selectedHourlyDate === getTodayVn()
-                        ? 'border-crimson bg-red-50 text-crimson font-bold'
-                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    Hôm nay
-                  </button>
-
-                  {quickDatesList.map((dStr) => (
-                    <button
-                      key={dStr}
-                      type="button"
-                      onClick={() => setSelectedHourlyDate(dStr)}
-                      className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition ${
-                        selectedHourlyDate === dStr
-                          ? 'border-crimson bg-red-50 text-crimson font-bold'
-                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
-                      }`}
-                    >
-                      {dStr}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
